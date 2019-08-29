@@ -2,3 +2,8 @@
 .DS_Store
 xcuserdata
 /*.jnilib
+/.gradle
+/generated-src/
+/build-lib/jdk/**/jdk.zip
+/build/
+/.idea/

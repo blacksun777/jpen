@@ -1,0 +1,61 @@
+plugins {
+    id 'java'
+    id "com.palantir.docker-run" version "0.22.1"
+    id "de.undercouch.download" version "4.0.0"
+}
+
+group = "net.sourceforge.jpen"
+version = "2.1-SNAPSHOT"
+sourceCompatibility = 1.8
+String buildLibDir = 'build-lib/'
+String buildLibSdkWinDir = buildLibDir + 'jdk/windows/'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+}
+
+compileJava {
+    options.headerOutputDirectory = file("build/generated/src/main/c/headers")
+}
+
+task ensureJdkWinDirectory {
+    doLast {
+        mkdir buildLibSdkWinDir
+    }
+}
+
+task downloadJdkWinZip(dependsOn: ensureJdkWinDirectory, type: Download) {
+    src 'https://github.com/AdoptOpenJDK/openjdk11-binaries/releases/download/jdk-11.0.4%2B11/OpenJDK11U-jdk_x64_windows_hotspot_11.0.4_11.zip'
+    dest new File(buildLibSdkWinDir, 'jdk.zip')
+    overwrite false
+    onlyIfModified true
+}
+
+task unzipIt(dependsOn: downloadJdkWinZip, type: Copy) {
+    from(zipTree(downloadJdkWinZip.dest)) {
+        include('**/include/**/*.h')
+    }
+    eachFile { FileCopyDetails fcd ->
+        //pop internal root directory
+        def pathsegments = fcd.relativePath.segments[1..-1] as String[]
+        fcd.relativePath = new RelativePath(!fcd.file.isDirectory(), pathsegments)
+    }
+    into buildLibSdkWinDir
+    includeEmptyDirs = false
+}
+
+dockerRun {
+    name 'my-container'
+    image 'dockcross/windows-shared-x64'
+    volumes '.': '/work'
+    daemonize false
+    command 'x86_64-w64-mingw32.shared-gcc', '-shared', './src/main/c/windows/jpen_provider_wintab_WintabAccess.c', './src/main/c/windows/Access.c', './src/main/c/windows/macros.c', '-I', buildLibSdkWinDir + 'include/', '-I', buildLibSdkWinDir + 'include/win32/', '-Lsrc/main/c/windows/lib-64/', '-lWINTAB64', '-o' + 'jpen.dll'
+}
+
+jar {
+    dependsOn 'compileWin'
+}
